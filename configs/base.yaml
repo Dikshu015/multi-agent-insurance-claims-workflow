@@ -1,0 +1,39 @@
+# Non-secret application configuration
+# API keys, DB URLs and other secrets must never go here - see .env instead
+
+app:
+  name: "Multi-Agent Insurance Claims Workflow"
+  default_country: "india"  # "india" or "us"; overridable via COUNTRY in .env
+
+
+llm:
+  default_provider: "groq"  # "groq" or "gemini"
+  groq_model: "llama-3.3-70b-versatile"
+  gemini_model: "gemini-2.5-flash"
+  temperature: 0.1  # kept low intentionally — agent decisions should be consistent/repeatable, not creative
+
+# Per-agent confidence thresholds.
+# If an agent's confidence score falls below its own threshold here,
+# the pipeline pauses at that node and routes to a human reviewer
+# instead of auto-advancing to the next agent.
+confidence_gates:
+  intake_agent: 0.7
+  fraud_crew: 0.65
+  damage_assessor: 0.7
+  policy_checker: 0.75
+  settlement_calculator: 0.8
+
+# Caps enforced per single claim run (not global across all claims).
+# Exists to bound LLM cost/usage if an agent gets stuck retrying.
+guardrails:
+  max_agent_calls_per_claim: 15
+  max_tokens_per_claim: 50000
+  max_cost_usd_per_claim: 1.00
+
+# HITL routing thresholds — independent of confidence_gates above.
+# A claim can pass every per-agent confidence check and still get
+# flagged for human review if it's high-value or high fraud-risk.
+hitl:
+  high_value_threshold_usd: 5000
+  high_value_threshold_inr: 400000
+  fraud_score_threshold: 0.6
