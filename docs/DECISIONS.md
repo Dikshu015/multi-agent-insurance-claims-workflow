@@ -49,6 +49,7 @@ DB on Neon free tier.
 **Reference**: No deployment config included.
 
 **Known free-tier limitations**:
+
 - Render free spins down after 15 min idle (30-60s cold start)
 - No persistent disk on Render free (solved by Neon Postgres)
 - Neon free tier has compute quota limits
@@ -92,17 +93,19 @@ purely a config change, zero code changes.
 
 ## `src/models/schemas.py` — Currency-neutral field names
 
-**Decision**: Renamed `assessed_damage_usd`, `covered_amount_usd`,
-`deductible_usd`, `settlement_amount_usd`, `final_amount_usd` to
-`assessed_damage_amount`, `covered_amount`, `deductible`,
-`settlement_amount`, `final_amount`.
+**Decision**: Renamed `_usd` suffixed money fields to currency-neutral
+names: `assessed_damage_amount`, `covered_amount`, `deductible`,
+`settlement_amount`, `gross_damage`, `deductible_applied`,
+`depreciation_applied`, `final_amount`.
 
 **Reference**: All money fields suffixed with `_usd`.
 
-**Why**: The system supports INR and USD. Currency is determined by
-`claim.currency` (derived from claimant country). Hardcoding `_usd`
-in field names is misleading for Indian claims and would require
-renaming if a third currency is added.
+**Why**: System supports both INR and USD. Currency is determined by
+`claim.currency` derived from claimant country. `_usd` suffix is
+misleading for Indian claims.
+
+**Known risk**: Agent prompts in Phase 7 may reference original `_usd`
+field names. Will fix prompt mismatches when building each agent.
 
 ---
 
@@ -121,6 +124,7 @@ deserialization anyway, breaking any code expecting a Claim instance.
 **How we preserve type safety at boundaries**: agents that need typed
 access call `Claim(**state["masked_claim"])` to validate and convert
 on demand, rather than storing a Pydantic object in the state itself.
+
 ---
 
 ## `src/models/schemas.py` — `default_factory=list` fixes

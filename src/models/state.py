@@ -75,9 +75,11 @@ class ClaimsState(TypedDict):
 
     # ── Input ────────────────────────────────────────────────────────────
     claim: ClaimInput
-    # OUR IMPROVEMENT: typed as Optional[Claim] not Optional[dict] -- gives
-    # downstream agents proper field access instead of raw dict key lookups.
-    # PII field VALUES are masked but the container stays strongly typed.
+    # PII-masked version of raw claim sent to all agents -- plain dict so
+    # LangGraph's Postgres checkpointer can serialize/deserialize it cleanly
+    # across HITL pauses and cold restarts. Agents needing typed access call
+    # Claim(**state["masked_claim"]) on demand rather than storing a Pydantic
+    # object in state directly.
     masked_claim: Optional[dict]
 
     # ── Agent Outputs (populated incrementally as each agent completes) ──
