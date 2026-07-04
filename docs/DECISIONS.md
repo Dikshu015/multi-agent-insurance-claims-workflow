@@ -108,16 +108,19 @@ renaming if a third currency is added.
 
 ## `src/models/state.py` — `masked_claim` type
 
-**Decision**: `masked_claim: Optional[Claim]` instead of
-`Optional[dict]`.
+**Decision**: `masked_claim: Optional[dict]` -- faithful to reference.
 
-**Reference**: `masked_claim: Optional[dict]`.
+**We considered**: `Optional[Claim]` for typed field access.
 
-**Why**: Our rich `Claim` model gives downstream agents proper typed
-field access (`masked_claim.claimant.country`) instead of raw dict
-key lookups (`masked_claim["claimant"]["country"]`). PII field values
-are still masked -- only the container type changes.
+**Why we reverted**: LangGraph's Postgres checkpointer serializes state
+to JSON at every HITL pause and restores it on resume/cold restart.
+A Pydantic BaseModel inside a TypedDict breaks this -- it isn't
+directly JSON-serializable and comes back as a plain dict after
+deserialization anyway, breaking any code expecting a Claim instance.
 
+**How we preserve type safety at boundaries**: agents that need typed
+access call `Claim(**state["masked_claim"])` to validate and convert
+on demand, rather than storing a Pydantic object in the state itself.
 ---
 
 ## `src/models/schemas.py` — `default_factory=list` fixes
