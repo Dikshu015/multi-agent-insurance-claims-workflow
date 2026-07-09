@@ -170,7 +170,7 @@ def log_final_decision(
 def get_claim_audit_trail(
         claim_id: str,
         days_back: int = 30,
-) -> list[dict[str,any]]:
+) -> list[dict[str,Any]]:
     """Return audit entries for a claim ordered by timestamp."""
 
     log_directory = Path(
