@@ -165,3 +165,163 @@ mutates the lru_cache object -- second call sees different data.
 
 **Why**: Mutating a cached dict is a silent correctness bug. deepcopy
 ensures every call gets an independent copy of the config dict.
+
+---
+
+## `src/llm.py` — Runtime-configurable LLM factory
+
+**Decision**: Extended `get_llm()` to support runtime overrides for `temperature`, `max_tokens`, and `streaming` while still defaulting to configuration values.
+
+**Reference**: Configuration values are loaded entirely from YAML/environment and cannot be overridden per call.
+
+**Why**: Different parts of the system have different inference requirements. Deterministic validation agents may require `temperature=0`, while summarization or explanation agents may benefit from higher temperatures. Allowing runtime overrides improves flexibility without sacrificing centralized configuration.
+
+---
+
+## `src/llm.py` — Builder abstraction
+
+**Decision**: Introduced provider-specific builder functions (`_build_groq`, `_build_gemini`) registered through a `_BUILDERS` mapping.
+
+**Reference**: Provider selection logic is less modular.
+
+**Why**: Separating provider initialization behind builders isolates provider-specific SDK code. Adding a future provider (OpenAI, Anthropic, Ollama, etc.) requires only implementing a new builder and registering it in `_BUILDERS`, without modifying the factory logic.
+
+---
+
+## `src/llm.py` — Provider-independent token tracking
+
+**Decision**: Implemented `_TokenTracker` as a LangChain callback to accumulate token usage and estimate inference cost.
+
+**Reference**: Similar tracking exists but is tightly coupled to provider response metadata.
+
+**Why**: LangChain exposes slightly different metadata depending on the provider. `_TokenTracker` normalizes these differences into a single internal representation while keeping provider-specific parsing isolated inside `_extract_usage()`.
+
+---
+
+## `src/llm.py` — Token pricing lookup
+
+**Decision**: Pricing is resolved once during `_TokenTracker` initialization instead of performing repeated model lookups on every callback.
+
+**Reference**: Pricing is looked up repeatedly during token accounting.
+
+**Why**: Token callbacks execute after every LLM invocation. Resolving prices once avoids repeated dictionary lookups and keeps callback execution lightweight.
+
+---
+
+## `src/security/pii_masker.py` — Cached regex compilation
+
+**Decision**: Added `@lru_cache(maxsize=1)` to `_build_patterns()`.
+
+**Reference**: Regular expressions are recompiled every time masking functions are called.
+
+**Why**: Regex compilation is relatively expensive compared to matching. Country-specific patterns rarely change during runtime, so compiling them once and reusing them significantly reduces overhead.
+
+---
+
+## `src/security/pii_masker.py` — Explicit cache invalidation
+
+**Decision**: Added `clear_pattern_cache()`.
+
+**Reference**: No explicit cache invalidation mechanism.
+
+**Why**: If the active country configuration changes while the application is running, cached regex patterns would otherwise remain stale. Explicit cache invalidation allows configuration reloads without restarting the application.
+
+---
+
+## `src/security/pii_masker.py` — Reusable string masking helper
+
+**Decision**: Introduced a dedicated `_mask_string()` helper used by all masking operations.
+
+**Reference**: Regex substitution logic is duplicated across multiple code paths.
+
+**Why**: Centralizing masking logic removes duplication, keeps placeholder generation consistent, and ensures future masking improvements only need to be implemented once.
+
+---
+
+## `src/security/pii_masker.py` — Improved type annotations
+
+**Decision**: Added precise generic type hints such as `dict[str, Any]` and `re.Pattern[str]`.
+
+**Reference**: Uses broader type annotations.
+
+**Why**: More precise typing improves IDE autocomplete, static analysis, and long-term maintainability without changing runtime behavior.
+
+---
+
+## `src/security/pii_masker.py` — Country configuration error handling
+
+**Decision**: Configuration loading failures are logged using `logger.exception()` before falling back to safe defaults.
+
+**Reference**: Exceptions are silently ignored.
+
+**Why**: Silent failures make configuration issues difficult to diagnose. Logging the complete traceback preserves production resilience while improving observability.
+
+---
+
+## `src/security/audit_log.py` — Immutable audit entry writes
+
+**Decision**: `_write_entry()` creates a shallow copy of the provided entry before appending the computed hash.
+
+**Reference**: The original implementation mutates the caller's dictionary by inserting the `"hash"` field.
+
+**Why**: Audit logging should not unexpectedly modify objects owned by the caller. Copying preserves the immutability contract while still writing the hashed entry to disk.
+
+---
+
+## `src/security/audit_log.py` — Path-oriented file handling
+
+**Decision**: Uses `Path.open()` instead of the built-in `open()` function.
+
+**Reference**: Uses `open()` directly.
+
+**Why**: The project already represents log locations as `pathlib.Path` objects. Using `Path.open()` keeps the implementation consistent with the surrounding API and avoids unnecessary conversions.
+
+---
+
+## `src/security/audit_log.py` — Direct JSON streaming
+
+**Decision**: Uses `json.dump()` when writing audit entries instead of creating an intermediate string with `json.dumps()`.
+
+**Reference**: Serializes to a string before writing.
+
+**Why**: `json.dump()` is designed for file-backed serialization, avoids creating an intermediate string object, and more clearly communicates the intent of streaming JSON directly to disk.
+
+---
+
+## `src/security/audit_log.py` — Exception logging
+
+**Decision**: Replaced formatted error logging with `logger.exception()` inside exception handlers.
+
+**Reference**: Logs only the exception message.
+
+**Why**: Audit log failures are operational issues that benefit from a complete traceback. `logger.exception()` records both the message and full stack trace, making production debugging significantly easier while preserving the original behavior of not interrupting the claim processing pipeline.
+
+---
+
+## `src/security/audit_log.py` — Removed unused parameter
+
+**Decision**: Removed the unused `claim_id` parameter from `_get_log_path()`.
+
+**Reference**: `_get_log_path(claim_id)` accepted `claim_id` but never used it.
+
+**Why**: The audit log path depends only on the configured log directory and current date. Removing the unused parameter makes the function signature accurately describe its behavior and avoids misleading future contributors.
+
+---
+
+## `src/security/audit_log.py` — Deterministic hash serialization
+
+**Decision**: Added compact deterministic JSON serialization (`sort_keys=True`, `separators=(",", ":")`) before computing the SHA-256 hash.
+
+**Reference**: Uses `sort_keys=True` but relies on the default JSON formatting.
+
+**Why**: Compact serialization removes insignificant whitespace from the serialized representation. This guarantees that logically identical audit entries always produce identical hashes regardless of formatting.
+
+---
+
+## `src/security/audit_log.py` — Stronger type annotations
+
+**Decision**: Added explicit type annotations such as `dict[str, Any]` and `list[dict[str, Any]]` throughout the module.
+
+**Reference**: Uses generic `dict` and `list` annotations.
+
+**Why**: More precise typing improves IDE support, static analysis, and readability without changing runtime behavior.
