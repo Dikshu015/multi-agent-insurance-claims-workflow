@@ -35,3 +35,4 @@ Thumbs.db
 # Claude Code personal overrides (machine-specific, never commit)
 CLAUDE.local.md
 .claude/settings.local.json
+handsoff.md
